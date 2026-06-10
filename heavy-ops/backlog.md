@@ -1,45 +1,104 @@
 # Backlog heavy-ops
 
-## Contexte du projet
+## Contexte
 
-Le projet represente un outil interne avec login, dashboard, table volumineuse, analytics et parametres.
+Outil interne : login, dashboard, table volumineuse, analytics, parametres.
 
-## Format attendu
+## Referentiels
 
-Completer au minimum 3 user stories.
-Remplacer chaque champ entre crochets par votre contenu.
+**RGESN** (DINUM 2024) · **GR491** (INR 2022) · **WSG 1.0** (W3C 2023) · **Opquast** (2020+)
 
-## User story 1
+---
 
-- Contexte: En tant que *superviseur d'exploitation*, je veux *limiter la frequence de rafraichissement du tableau de bord*, afin de *reduire les requetes inutiles et la charge navigateur*.
-- Objectif: Passer d'un rafraichissement toutes les 5 secondes a un rafraichissement adapte au besoin, avec au moins 50 % d'appels en moins sur une session de 10 minutes.
-- Bonne pratique d eco-conception ciblee: Reduction du polling et mise en cache locale des donnees non critiques.
-- KPI associe: Nombre d'appels API par minute et consommation CPU moyenne pendant la navigation.
-- Repo ou ecran concerne: heavy-ops / page Dashboard et endpoint /api/dashboard.
-- Critere de reussite: Le dashboard reste lisible avec des donnees a jour, tout en diminuant de moitie le volume de requetes repetées mesure sur une session type.
-- Niveau de priorite: haute
+## US1 — Reduction du polling dashboard
 
-## User story 2
+**Contexte** : superviseur d'exploitation / reduire les requetes inutiles et la charge navigateur
+**Bonne pratique** : reduction du polling, cache HTTP par route, Page Visibility API — RGESN 5.2, RGESN 5.7, GR491 BP-029, WSG 1.0 §4.1.4
+**Priorite** : haute
 
-- Contexte: En tant *qu'analyste metier*, je veux *charger la file active par lots*, afin de *consulter rapidement les dossiers sans subir un temps de chargement excessif*.
-- Objectif: Afficher un premier jeu de donnees utile en moins de 2 secondes et limiter le volume initial rendu a 20 lignes visibles.
-- Bonne pratique d eco-conception ciblee: Pagination ou chargement progressif au lieu d'un chargement complet de gros datasets.
-- KPI associe: Temps jusqu'au premier rendu utile et nombre de lignes chargees au demarrage.
-- Repo ou ecran concerne: heavy-ops / ecran TablePage et endpoint /api/records.
-- Critere de reussite: La table permet de naviguer entre les dossiers sans charger toute la liste d'un coup, avec une latence percue plus faible et un debut d'affichage rapide.
-- Niveau de priorite: haute
+| # | Tache | Fichier |
+|---|---|---|
+| T1.1 | Dissocier les intervals : `dashboard` 30 s, `records` 60 s, `settings`/`analytics` one-shot | `OpsApp.tsx` |
+| T1.2 | Ecouter `visibilitychange` pour suspendre les intervals quand l'onglet est masque | `OpsApp.tsx` |
+| T1.3 | Supprimer le middleware global `Cache-Control: no-store` ; appliquer TTL par route (dashboard 25 s, records 55 s, settings 300 s) | `index.ts` |
+| T1.4 | Persister settings et analytics dans `sessionStorage` (one-shot, pas de re-fetch) | `OpsApp.tsx` |
 
-## User story 3
+| KPI | Avant | Apres | Gain |
+|---|---|---|---|
+| Requetes API / min (actif) | 48 (4 × 12) | 4 | **−92 %** |
+| Requetes API / min (onglet masque) | 48 | 0 | **−100 %** |
+| Requetes settings+analytics / 10 min | 120 | 1 | **−99 %** |
 
-- Contexte: En tant que *responsable de pilotage*, je veux *afficher seulement les indicateurs utiles dans l'espace analytics*, afin de *reduire la densite visuelle et les calculs de visualisation superflus*.
-- Objectif: Conserver au maximum 4 graphiques prioritaires et 6 indicateurs synthese, avec un ecran plus rapide a parcourir.
-- Bonne pratique d eco-conception ciblee: Priorisation de l'information et reduction des elements decoratifs ou redondants.
-- KPI associe: Nombre de composants graphiques affiches et temps de rendu de l'ecran analytics.
-- Repo ou ecran concerne: heavy-ops / page AnalyticsPage et donnees /api/analytics.
-- Critere de reussite: L'utilisateur identifie les signaux critiques en quelques secondes, avec moins de visuels affiches et moins de re-renders inutiles.
-- Niveau de priorite: moyenne
+---
 
-## Notes
+## US2 — Pagination de la file active
 
-- Vous pouvez ajouter d autres user stories si necessaire.
-- Le niveau de detail attendu doit permettre une priorisation exploitable.
+**Contexte** : analyste metier / premier rendu utile sans charger tout le dataset
+**Bonne pratique** : pagination serveur, cache memoire, compression HTTP — RGESN 4.4, RGESN 5.6, GR491 BP-032, WSG 1.0 §4.2.1
+**Priorite** : haute
+
+| # | Tache | Fichier |
+|---|---|---|
+| T2.1 | Ajouter `?page&limit` sur `/api/records`, reponse enveloppee `{ data, total, pageCount }` | `index.ts` |
+| T2.2 | Gerer un etat `page` dans `TablePage`, requeter `/api/records?page=N&limit=20`, afficher paginateur | `OpsApp.tsx` |
+| T2.3 | Charger `records.json` et `analytics.json` une seule fois au boot (cache memoire), supprimer `readFileSync` dans les handlers | `index.ts` |
+| T2.4 | Installer et activer le middleware `compression` (gzip/brotli) avant toutes les routes | `index.ts` |
+
+| KPI | Avant | Apres | Gain |
+|---|---|---|---|
+| Taille `/api/records` initial | 192 KB | ~4 KB (20 lignes) | **−98 %** |
+| Taille apres gzip | 192 KB | ~1,2 KB | **−99 %** |
+| Lignes transferees au demarrage | 180 | 20 | **−89 %** |
+| I/O disque par requete | 1 `readFileSync` | 0 | **−100 %** |
+
+---
+
+## US3 — Reduction des graphiques analytics
+
+**Contexte** : responsable de pilotage / supprimer les series jamais affichees et les re-renders superflus
+**Bonne pratique** : slice serveur, suppression props redondantes, memoisation — RGESN 4.4, RGESN 3.4, GR491 BP-034, WSG 1.0 §4.1.6, Opquast 227
+**Priorite** : moyenne
+
+| # | Tache | Fichier |
+|---|---|---|
+| T3.1 | Limiter `/api/analytics` a 4 series et 6 indicateurs cote serveur (slice avant `res.json`) | `index.ts` |
+| T3.2 | Retirer la prop `urgentRecords` de `AnalyticsPage` et supprimer le widget "Dossiers les plus exposes" (doublon du Dashboard) | `OpsApp.tsx` |
+| T3.3 | Encapsuler `DashboardPage` et `AnalyticsPage` dans `React.memo` | `OpsApp.tsx` |
+
+| KPI | Avant | Apres | Gain |
+|---|---|---|---|
+| Series JSON envoyees (`/api/analytics`) | 16 | 4 | **−75 %** |
+| Noeuds DOM mini-bars `<span>` | 288 (16×18) | 72 (4×18) | **−75 %** |
+| Re-renders `AnalyticsPage` / min | 12 | 2 | **−83 %** |
+| Props `urgentRecords` transmises inutilement | 180 records | 0 | **−100 %** |
+
+---
+
+## US4 — Cache assets et compression globale
+
+**Contexte** : admin systeme / eliminer les re-telechargements d'assets et reduire la bande passante
+**Bonne pratique** : cache immutable sur assets hashs, compression gzip — RGESN 5.6, RGESN 5.7, GR491 BP-029, Opquast 90
+**Priorite** : haute
+
+| # | Tache | Fichier |
+|---|---|---|
+| T4.1 | Remplacer `maxAge: 0` par `maxAge: '7d', immutable: true` sur `/assets` (noms Vite hashs) | `index.ts` |
+| T4.2 | (partage avec T1.3) Supprimer le middleware `no-store` global | `index.ts` |
+
+| KPI | Avant | Apres | Gain |
+|---|---|---|---|
+| Transfert JSON / session 10 min | ~5 MB | < 200 KB | **−96 %** |
+| Assets re-telecharges sur F5 | 100 % | 0 % (304 / cache) | **−100 %** |
+| Taille `records.json` (gzip) | 192 KB | ~13 KB | **−93 %** |
+
+---
+
+## Recapitulatif global
+
+| KPI | Avant | Apres | Gain |
+|---|---|---|---|
+| Requetes API / min | 48 | 4 | **−92 %** |
+| Transfert JSON / session 10 min | ~5 MB | < 200 KB | **−96 %** |
+| Lignes au 1er rendu `/records` | 180 | 20 | **−89 %** |
+| Series graphiques envoyees | 16 | 4 | **−75 %** |
+| I/O disque par requete | 1 readFileSync | 0 | **−100 %** |
