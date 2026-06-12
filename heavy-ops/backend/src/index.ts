@@ -19,10 +19,6 @@ app.use((req, _res, next) => {
   next();
 });
 app.use('/assets', express.static(path.join(projectRoot, 'assets'), { maxAge: 0 }));
-app.use((_req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store');
-  next();
-});
 
 app.post('/api/session', (_req, res) => {
   res.json({ token: 'training-session', user: 'eco-learner', expiresIn: 3600 });
@@ -30,6 +26,7 @@ app.post('/api/session', (_req, res) => {
 
 app.get('/api/dashboard', (_req, res) => {
   const analytics = readJson('data/analytics.json');
+  res.setHeader('Cache-Control', 'public, max-age=25, stale-while-revalidate=30');
   res.json({
     summary: analytics.summary,
     charts: analytics.charts,
@@ -39,15 +36,18 @@ app.get('/api/dashboard', (_req, res) => {
 });
 
 app.get('/api/records', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=55');
   res.json(readJson('data/records.json'));
 });
 
 app.get('/api/analytics', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=120');
   res.json(readJson('data/analytics.json'));
 });
 
 app.get('/api/settings', (_req, res) => {
   const analytics = readJson('data/analytics.json');
+  res.setHeader('Cache-Control', 'public, max-age=300');
   res.json(analytics.settings);
 });
 
