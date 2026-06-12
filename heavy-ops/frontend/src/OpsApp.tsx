@@ -643,9 +643,26 @@ export default function OpsApp() {
       fetchJson<RecordRow[]>('/api/records').then(setRecords);
     }
 
-    // one-shot : settings et analytics ne changent pas en cours de session
-    fetchJson<SettingsPayload>('/api/settings').then(setSettings);
-    fetchJson<AnalyticsPayload>('/api/analytics').then(setAnalytics);
+    // one-shot avec cache sessionStorage : settings et analytics ne changent pas en cours de session
+    const cachedSettings = sessionStorage.getItem('ops-settings');
+    if (cachedSettings) {
+      setSettings(JSON.parse(cachedSettings));
+    } else {
+      fetchJson<SettingsPayload>('/api/settings').then((data) => {
+        setSettings(data);
+        sessionStorage.setItem('ops-settings', JSON.stringify(data));
+      });
+    }
+
+    const cachedAnalytics = sessionStorage.getItem('ops-analytics');
+    if (cachedAnalytics) {
+      setAnalytics(JSON.parse(cachedAnalytics));
+    } else {
+      fetchJson<AnalyticsPayload>('/api/analytics').then((data) => {
+        setAnalytics(data);
+        sessionStorage.setItem('ops-analytics', JSON.stringify(data));
+      });
+    }
 
     loadDashboard();
     loadRecords();
