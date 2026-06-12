@@ -635,23 +635,28 @@ export default function OpsApp() {
       return;
     }
 
-    function loadAll() {
-      Promise.all([
-        fetchJson<DashboardPayload>('/api/dashboard'),
-        fetchJson<RecordRow[]>('/api/records'),
-        fetchJson<SettingsPayload>('/api/settings'),
-        fetchJson<AnalyticsPayload>('/api/analytics')
-      ]).then(([dashboardPayload, recordPayload, settingsPayload, analyticsPayload]) => {
-        setDashboard(dashboardPayload);
-        setRecords(recordPayload);
-        setSettings(settingsPayload);
-        setAnalytics(analyticsPayload);
-      });
+    function loadDashboard() {
+      fetchJson<DashboardPayload>('/api/dashboard').then(setDashboard);
     }
 
-    loadAll();
-    const timer = window.setInterval(loadAll, 5000);
-    return () => window.clearInterval(timer);
+    function loadRecords() {
+      fetchJson<RecordRow[]>('/api/records').then(setRecords);
+    }
+
+    // one-shot : settings et analytics ne changent pas en cours de session
+    fetchJson<SettingsPayload>('/api/settings').then(setSettings);
+    fetchJson<AnalyticsPayload>('/api/analytics').then(setAnalytics);
+
+    loadDashboard();
+    loadRecords();
+
+    const dashTimer = window.setInterval(loadDashboard, 30_000);
+    const recTimer  = window.setInterval(loadRecords,   60_000);
+
+    return () => {
+      window.clearInterval(dashTimer);
+      window.clearInterval(recTimer);
+    };
   }, [sessionToken]);
 
   const statusSummary = useMemo<StatusSnapshot[]>(() => {
