@@ -650,12 +650,27 @@ export default function OpsApp() {
     loadDashboard();
     loadRecords();
 
-    const dashTimer = window.setInterval(loadDashboard, 30_000);
-    const recTimer  = window.setInterval(loadRecords,   60_000);
+    let dashTimer = window.setInterval(loadDashboard, 30_000);
+    let recTimer  = window.setInterval(loadRecords,   60_000);
+
+    function handleVisibility() {
+      if (document.hidden) {
+        window.clearInterval(dashTimer);
+        window.clearInterval(recTimer);
+      } else {
+        loadDashboard();
+        loadRecords();
+        dashTimer = window.setInterval(loadDashboard, 30_000);
+        recTimer  = window.setInterval(loadRecords,   60_000);
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.clearInterval(dashTimer);
       window.clearInterval(recTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [sessionToken]);
 
